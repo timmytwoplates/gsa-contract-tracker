@@ -96,6 +96,7 @@ def get_db_connection(config: dict) -> sqlite3.Connection:
 # Archive datestamp detection
 # ---------------------------------------------------------------------------
 
+
 def get_latest_datestamp(archive_base: str, fallback: str = "20260306") -> str:
     """
     Scrape the USASpending archive index to find the most recent bulk datestamp.
@@ -110,7 +111,9 @@ def get_latest_datestamp(archive_base: str, fallback: str = "20260306") -> str:
             logger.info(f"Latest USASpending archive datestamp: {latest}")
             return latest
     except Exception as e:
-        logger.warning(f"Could not auto-detect datestamp ({e}), using fallback {fallback}")
+        logger.warning(
+            f"Could not auto-detect datestamp ({e}), using fallback {fallback}"
+        )
     return fallback
 
 
@@ -138,6 +141,7 @@ def get_last_completed_datestamp(conn: sqlite3.Connection) -> str | None:
 # Agency list
 # ---------------------------------------------------------------------------
 
+
 def get_agencies(agency_codes_url: str) -> dict[str, str]:
     """Fetch toptier agency codes from USASpending reference data."""
     resp = requests.get(agency_codes_url, timeout=30)
@@ -146,7 +150,11 @@ def get_agencies(agency_codes_url: str) -> dict[str, str]:
     agencies: dict[str, str] = {}
     for row in rows:
         code = row.get("CGAC AGENCY CODE", "").strip()
-        if row.get("TOPTIER_FLAG", "").strip() == "TRUE" and code and code not in agencies:
+        if (
+            row.get("TOPTIER_FLAG", "").strip() == "TRUE"
+            and code
+            and code not in agencies
+        ):
             agencies[code] = row["AGENCY NAME"]
     logger.info(f"Loaded {len(agencies)} toptier agency codes")
     return agencies
@@ -155,6 +163,7 @@ def get_agencies(agency_codes_url: str) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # ZIP download (with retry)
 # ---------------------------------------------------------------------------
+
 
 def download_zip(url: str, max_retries: int = 3) -> str:
     """
@@ -197,6 +206,7 @@ def download_zip(url: str, max_retries: int = 3) -> str:
 # Checkpoint helpers
 # ---------------------------------------------------------------------------
 
+
 def checkpoint_path(checkpoint_dir: Path, fy: int, code: str) -> Path:
     return checkpoint_dir / f"FY{fy}_{code}.csv"
 
@@ -216,6 +226,7 @@ def is_done(checkpoint_dir: Path, fy: int, code: str) -> bool:
 # DB upsert
 # ---------------------------------------------------------------------------
 
+
 def upsert_terminations(conn: sqlite3.Connection, rows: list[dict], fy: int) -> int:
     """
     Upsert termination rows into the DB.
@@ -229,7 +240,8 @@ def upsert_terminations(conn: sqlite3.Connection, rows: list[dict], fy: int) -> 
     inserted = 0
     for row in rows:
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR IGNORE INTO terminations (
                     contract_award_unique_key, piid, mod_number,
                     termination_code, termination_reason, termination_date,
@@ -245,11 +257,15 @@ def upsert_terminations(conn: sqlite3.Connection, rows: list[dict], fy: int) -> 
                     :awarding_office, :naics, :psc, :pricing, :set_aside,
                     :place_state, :fiscal_year, :link
                 )
-            """, {**row, "fiscal_year": fy})
+            """,
+                {**row, "fiscal_year": fy},
+            )
             if cursor.rowcount:
                 inserted += 1
         except sqlite3.Error as e:
-            logger.warning(f"Upsert error for {row.get('contract_award_unique_key')}: {e}")
+            logger.warning(
+                f"Upsert error for {row.get('contract_award_unique_key')}: {e}"
+            )
 
     conn.commit()
     return inserted
@@ -258,6 +274,7 @@ def upsert_terminations(conn: sqlite3.Connection, rows: list[dict], fy: int) -> 
 # ---------------------------------------------------------------------------
 # Archive processing
 # ---------------------------------------------------------------------------
+
 
 def process_agency_fy(
     archive_base: str,
@@ -310,9 +327,7 @@ def process_agency_fy(
 
             for csv_name in csv_names:
                 with zf.open(csv_name) as raw:
-                    reader = csv.DictReader(
-                        io.TextIOWrapper(raw, encoding="utf-8-sig")
-                    )
+                    reader = csv.DictReader(io.TextIOWrapper(raw, encoding="utf-8-sig"))
                     for row in reader:
                         rows_scanned += 1
                         action = (row.get("action_type_code") or "").strip().upper()
@@ -329,9 +344,15 @@ def process_agency_fy(
                         )
 
                         # Convert numeric fields
-                        for num_col in ("federal_action_obligation", "total_obligated", "ceiling"):
+                        for num_col in (
+                            "federal_action_obligation",
+                            "total_obligated",
+                            "ceiling",
+                        ):
                             try:
-                                mapped[num_col] = float(mapped[num_col]) if mapped[num_col] else None
+                                mapped[num_col] = (
+                                    float(mapped[num_col]) if mapped[num_col] else None
+                                )
                             except (ValueError, TypeError):
                                 mapped[num_col] = None
 
@@ -373,13 +394,16 @@ def process_agency_fy(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Download federal contract terminations from USASpending bulk archives"
     )
     parser.add_argument("--fy", nargs="+", type=int, help="Fiscal year(s) to process")
     parser.add_argument("--agencies", nargs="+", help="Specific agency CGAC codes")
-    parser.add_argument("--force", action="store_true", help="Re-download all (ignore checkpoints)")
+    parser.add_argument(
+        "--force", action="store_true", help="Re-download all (ignore checkpoints)"
+    )
     parser.add_argument(
         "--force-current-fy", action="store_true", help="Re-download current FY only"
     )
@@ -407,12 +431,18 @@ def main() -> None:
         last = get_last_completed_datestamp(conn)
         print(f"Latest archive datestamp : {latest_datestamp}")
         print(f"Last completed datestamp : {last or 'none'}")
-        print(f"Delta available          : {'YES' if latest_datestamp != last else 'NO'}")
+        print(
+            f"Delta available          : {'YES' if latest_datestamp != last else 'NO'}"
+        )
         conn.close()
         return
 
     last_datestamp = get_last_completed_datestamp(conn)
-    if latest_datestamp == last_datestamp and not args.force and not args.force_current_fy:
+    if (
+        latest_datestamp == last_datestamp
+        and not args.force
+        and not args.force_current_fy
+    ):
         logger.info(
             f"No new data available (datestamp={latest_datestamp}). "
             "Use --force to re-run anyway."
@@ -446,10 +476,13 @@ def main() -> None:
 
     run_id = str(uuid.uuid4())
     run_start = datetime.now(timezone.utc).isoformat()
-    conn.execute("""
+    conn.execute(
+        """
         INSERT INTO refresh_log (run_id, source, started_at, status, notes)
         VALUES (?, 'usaspending', ?, 'running', ?)
-    """, (run_id, run_start, f"datestamp={latest_datestamp}"))
+    """,
+        (run_id, run_start, f"datestamp={latest_datestamp}"),
+    )
     conn.commit()
 
     total_scanned = 0
@@ -487,22 +520,27 @@ def main() -> None:
                 logger.error(f"Unexpected error for {code} FY{fy}: {e}")
 
     status = "failed" if ip_blocked else "completed"
-    conn.execute("""
+    conn.execute(
+        """
         UPDATE refresh_log
         SET completed_at = ?, status = ?, rows_processed = ?, rows_changed = ?
         WHERE run_id = ?
-    """, (
-        datetime.now(timezone.utc).isoformat(),
-        status,
-        total_scanned,
-        total_kept,
-        run_id,
-    ))
+    """,
+        (
+            datetime.now(timezone.utc).isoformat(),
+            status,
+            total_scanned,
+            total_kept,
+            run_id,
+        ),
+    )
     conn.commit()
     conn.close()
 
     if ip_blocked:
-        logger.warning("Run stopped due to IP block. Progress is checkpointed — re-run to continue.")
+        logger.warning(
+            "Run stopped due to IP block. Progress is checkpointed -- re-run to continue."
+        )
     else:
         logger.success(
             f"Done. Scanned {total_scanned:,} rows, kept {total_kept:,} terminations."

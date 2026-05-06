@@ -1,5 +1,5 @@
 """
-bootstrap.py — First-run database setup for gsa-contract-tracker.
+bootstrap.py -- First-run database setup for gsa-contract-tracker.
 
 Creates the SQLite database and all tables. Safe to re-run: uses
 CREATE TABLE IF NOT EXISTS throughout. Also seeds the contract_vehicles
@@ -45,7 +45,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
     cursor.execute("PRAGMA foreign_keys=ON")
 
     # -------------------------------------------------------------------------
-    # schema_version — tracks migrations
+    # schema_version
     # -------------------------------------------------------------------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS schema_version (
@@ -55,7 +55,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
     """)
 
     # -------------------------------------------------------------------------
-    # contract_vehicles — registry of all supported GSA contract vehicles.
+    # contract_vehicles -- registry of all supported GSA contract vehicles.
     # Adding a new vehicle here (plus config.yaml) enables it project-wide.
     # -------------------------------------------------------------------------
     cursor.execute("""
@@ -72,7 +72,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
     """)
 
     # -------------------------------------------------------------------------
-    # mas_vendors — current snapshot of active vendors for each vehicle.
+    # mas_vendors -- current snapshot of active vendors for each vehicle.
     # Rebuilt daily from eLibrary CSVs; removals are soft-deleted (status).
     # -------------------------------------------------------------------------
     cursor.execute("""
@@ -97,7 +97,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
             option_period_end_date      TEXT,
             ultimate_contract_end_date  TEXT,
             sam_uei                     TEXT,
-            -- Set-aside flags (0/1 from MAS CSV columns)
+            -- Set-aside / socioeconomic flags (0/1, verified from live MAS CSV)
             small_business              INTEGER DEFAULT 0,
             other_than_small_business   INTEGER DEFAULT 0,
             woman_owned                 INTEGER DEFAULT 0,
@@ -109,6 +109,16 @@ def create_tables(conn: sqlite3.Connection) -> None:
             eight_a                     INTEGER DEFAULT 0,
             eight_a_sole_source         INTEGER DEFAULT 0,
             hub_zone                    INTEGER DEFAULT 0,
+            tribally_owned              INTEGER DEFAULT 0,
+            american_indian_owned       INTEGER DEFAULT 0,
+            alaskan_native_corp         INTEGER DEFAULT 0,
+            native_hawaiian_org         INTEGER DEFAULT 0,
+            eight_a_joint_venture       INTEGER DEFAULT 0,
+            woman_owned_joint_venture   INTEGER DEFAULT 0,
+            sdvosb_joint_venture        INTEGER DEFAULT 0,
+            hubzone_joint_venture       INTEGER DEFAULT 0,
+            state_local_coop            INTEGER DEFAULT 0,
+            disaster_recovery           INTEGER DEFAULT 0,
             -- Lifecycle tracking
             status                      TEXT    DEFAULT 'active',
             first_seen_at               TEXT    DEFAULT (datetime('now')),
@@ -132,9 +142,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
     """)
 
     # -------------------------------------------------------------------------
-    # mas_vendor_sins — SINs are many-per-vendor; stored in their own table.
-    # SIN changes are high-priority events and tracked separately from
-    # field-level changes.
+    # mas_vendor_sins -- SINs are many-per-vendor; stored separately.
+    # SIN changes are high-priority and tracked independently of field diffs.
     # -------------------------------------------------------------------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS mas_vendor_sins (
@@ -142,7 +151,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
             contract_number TEXT    NOT NULL,
             vehicle_id      INTEGER NOT NULL REFERENCES contract_vehicles(id),
             sin             TEXT    NOT NULL,
-            sin_description TEXT,
+            large_category  TEXT,
+            sub_category    TEXT,
             active          INTEGER DEFAULT 1,
             added_at        TEXT    DEFAULT (datetime('now')),
             removed_at      TEXT,
@@ -156,7 +166,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
     """)
 
     # -------------------------------------------------------------------------
-    # terminations — termination modifications from USASpending bulk archives.
+    # terminations -- termination modifications from USASpending bulk archives.
     # One row per termination modification (a contract can have multiple).
     # -------------------------------------------------------------------------
     cursor.execute("""
@@ -201,8 +211,9 @@ def create_tables(conn: sqlite3.Connection) -> None:
     """)
 
     # -------------------------------------------------------------------------
-    # mas_change_log — audit trail for all detected eLibrary changes.
-    # Levenshtein distance is stored so analysts can tune thresholds post-hoc.
+    # mas_change_log -- audit trail for all detected eLibrary changes.
+    # Levenshtein distance stored so thresholds can be tuned post-hoc.
+    # Valid change_type values: ADD, REMOVE, SIN_ADD, SIN_REMOVE, FIELD_UPDATE
     # -------------------------------------------------------------------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS mas_change_log (
@@ -218,7 +229,6 @@ def create_tables(conn: sqlite3.Connection) -> None:
             detected_at          TEXT    DEFAULT (datetime('now'))
         )
     """)
-    # Valid change_type values: ADD, REMOVE, SIN_ADD, SIN_REMOVE, FIELD_UPDATE
 
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_change_log_contract
@@ -234,7 +244,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
     """)
 
     # -------------------------------------------------------------------------
-    # refresh_log — operational log of every pipeline run.
+    # refresh_log -- operational log of every pipeline run.
+    # Valid status values: running, completed, failed
     # -------------------------------------------------------------------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS refresh_log (
@@ -249,14 +260,12 @@ def create_tables(conn: sqlite3.Connection) -> None:
             notes           TEXT
         )
     """)
-    # Valid status values: running, completed, failed
 
-    # -------------------------------------------------------------------------
     # Record schema version
-    # -------------------------------------------------------------------------
-    cursor.execute("""
-        INSERT OR IGNORE INTO schema_version (version) VALUES (?)
-    """, (SCHEMA_VERSION,))
+    cursor.execute(
+        "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
+        (SCHEMA_VERSION,),
+    )
 
     conn.commit()
     logger.info("All tables created / verified.")
@@ -265,22 +274,25 @@ def create_tables(conn: sqlite3.Connection) -> None:
 def seed_vehicles(conn: sqlite3.Connection, config: dict) -> None:
     """
     Seed the contract_vehicles table from config.yaml.
-    Uses INSERT OR IGNORE so re-runs are safe; won't overwrite manual edits.
+    Uses INSERT OR IGNORE so re-runs are safe and won't overwrite manual edits.
     """
     vehicles = config.get("elib", {}).get("vehicles", {})
     cursor = conn.cursor()
 
     for code, attrs in vehicles.items():
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT OR IGNORE INTO contract_vehicles (code, name, csv_url, enabled, notes)
             VALUES (?, ?, ?, ?, ?)
-        """, (
-            code,
-            attrs.get("name", code),
-            attrs.get("csv_url"),
-            1 if attrs.get("enabled", False) else 0,
-            attrs.get("notes"),
-        ))
+            """,
+            (
+                code,
+                attrs.get("name", code),
+                attrs.get("csv_url"),
+                1 if attrs.get("enabled", False) else 0,
+                attrs.get("notes"),
+            ),
+        )
 
     conn.commit()
     count = cursor.execute("SELECT COUNT(*) FROM contract_vehicles").fetchone()[0]
@@ -289,8 +301,7 @@ def seed_vehicles(conn: sqlite3.Connection, config: dict) -> None:
 
 def drop_tables(conn: sqlite3.Connection) -> None:
     """
-    Drop all application tables. DESTRUCTIVE — only used with --reset flag.
-    Requires explicit confirmation prompt.
+    Drop all application tables. DESTRUCTIVE -- only used with --reset flag.
     """
     tables = [
         "mas_change_log",
@@ -315,7 +326,7 @@ def main() -> None:
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="DROP and recreate all tables. DESTRUCTIVE — requires confirmation.",
+        help="DROP and recreate all tables. DESTRUCTIVE -- requires confirmation.",
     )
     args = parser.parse_args()
 
@@ -329,7 +340,7 @@ def main() -> None:
     try:
         if args.reset:
             confirm = input(
-                f"\n⚠️  RESET requested. This will DELETE ALL DATA in {db_path}.\n"
+                f"\nRESET requested. This will DELETE ALL DATA in {db_path}.\n"
                 "Type 'yes' to confirm: "
             ).strip()
             if confirm.lower() != "yes":

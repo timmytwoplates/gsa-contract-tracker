@@ -56,6 +56,7 @@ def query(sql: str, params: tuple = ()) -> pd.DataFrame:
 # Overview / summary queries
 # ---------------------------------------------------------------------------
 
+
 def get_summary_stats() -> dict:
     """High-level KPIs for the Overview page."""
     conn = get_connection()
@@ -115,7 +116,8 @@ def get_terminations_by_reason() -> pd.DataFrame:
 def get_terminations_trend(vehicle_filter: str | None = None) -> pd.DataFrame:
     """Monthly termination count, optionally filtered to MAS/BPA contracts only."""
     if vehicle_filter:
-        return query("""
+        return query(
+            """
             SELECT strftime('%Y-%m', t.termination_date) as month,
                    COUNT(*) as terminations,
                    SUM(t.federal_action_obligation) as obligation
@@ -127,7 +129,9 @@ def get_terminations_trend(vehicle_filter: str | None = None) -> pd.DataFrame:
               AND t.termination_date IS NOT NULL
             GROUP BY month
             ORDER BY month
-        """, (vehicle_filter,))
+        """,
+            (vehicle_filter,),
+        )
     return query("""
         SELECT strftime('%Y-%m', termination_date) as month,
                COUNT(*) as terminations,
@@ -142,6 +146,7 @@ def get_terminations_trend(vehicle_filter: str | None = None) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Cancellation Pending
 # ---------------------------------------------------------------------------
+
 
 def get_cancellation_pending() -> pd.DataFrame:
     """
@@ -176,6 +181,7 @@ def get_cancellation_pending() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Terminations table
 # ---------------------------------------------------------------------------
+
 
 def get_terminations(
     vehicle: str | None = None,
@@ -214,7 +220,8 @@ def get_terminations(
 
     where = " AND ".join(conditions)
 
-    return query(f"""
+    return query(
+        f"""
         SELECT
             t.piid              AS contract_number,
             v.vendor_name,
@@ -240,12 +247,15 @@ def get_terminations(
         INNER JOIN contract_vehicles cv ON v.vehicle_id = cv.id
         WHERE {where}
         ORDER BY t.termination_date DESC
-    """, tuple(params))
+    """,
+        tuple(params),
+    )
 
 
 # ---------------------------------------------------------------------------
 # Vendor roster
 # ---------------------------------------------------------------------------
+
 
 def get_vendor_roster(
     vehicle: str | None = None,
@@ -264,7 +274,8 @@ def get_vendor_roster(
 
     where = " AND ".join(conditions)
 
-    return query(f"""
+    return query(
+        f"""
         SELECT
             v.contract_number,
             v.vendor_name,
@@ -289,12 +300,15 @@ def get_vendor_roster(
             ON UPPER(TRIM(t.piid)) = UPPER(TRIM(v.contract_number))
         WHERE {where}
         ORDER BY v.vendor_name
-    """, tuple(params))
+    """,
+        tuple(params),
+    )
 
 
 # ---------------------------------------------------------------------------
 # Recent changes
 # ---------------------------------------------------------------------------
+
 
 def get_recent_changes(days: int = 30, change_type: str | None = None) -> pd.DataFrame:
     conditions = [f"cl.detected_at >= datetime('now', '-{days} days')"]
@@ -306,7 +320,8 @@ def get_recent_changes(days: int = 30, change_type: str | None = None) -> pd.Dat
 
     where = " AND ".join(conditions)
 
-    return query(f"""
+    return query(
+        f"""
         SELECT
             cl.detected_at,
             cl.change_type,
@@ -322,12 +337,15 @@ def get_recent_changes(days: int = 30, change_type: str | None = None) -> pd.Dat
         INNER JOIN contract_vehicles cv ON cl.vehicle_id = cv.id
         WHERE {where}
         ORDER BY cl.detected_at DESC
-    """, tuple(params))
+    """,
+        tuple(params),
+    )
 
 
 # ---------------------------------------------------------------------------
 # Filter option lists (for Streamlit selectboxes)
 # ---------------------------------------------------------------------------
+
 
 def get_active_vehicles() -> list[str]:
     df = query("SELECT code FROM contract_vehicles WHERE enabled = 1 ORDER BY code")
@@ -336,18 +354,21 @@ def get_active_vehicles() -> list[str]:
 
 def get_large_categories(vehicle: str | None = None) -> list[str]:
     if vehicle:
-        df = query("""
+        df = query(
+            """
             SELECT DISTINCT v.large_category FROM mas_vendors v
             INNER JOIN contract_vehicles cv ON v.vehicle_id = cv.id
             WHERE cv.code = ? AND v.large_category IS NOT NULL
-            ORDER BY v.large_category
-        """, (vehicle,))
+            ORDER BY large_category
+            """,
+            (vehicle,),
+        )
     else:
         df = query("""
             SELECT DISTINCT large_category FROM mas_vendors
             WHERE large_category IS NOT NULL
             ORDER BY large_category
-        """)
+            """)
     return df["large_category"].tolist()
 
 
@@ -356,5 +377,5 @@ def get_departments() -> list[str]:
         SELECT DISTINCT department FROM terminations
         WHERE department IS NOT NULL
         ORDER BY department
-    """)
+        """)
     return df["department"].tolist()
