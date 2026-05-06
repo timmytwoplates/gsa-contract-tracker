@@ -1,0 +1,44 @@
+# =============================================================================
+# gsa-contract-tracker — Python dependencies
+# Pin major versions; minor/patch float for security updates.
+# =============================================================================
+
+# --- Core HTTP & Parsing ---
+requests>=2.31,<3
+lxml>=5.0,<6
+beautifulsoup4>=4.12,<5
+
+# --- Data ---
+pandas>=2.1,<3
+openpyxl>=3.1,<4           # Excel file support (D2D exports, advantage sales)
+rapidfuzz>=3.5,<4           # Levenshtein / fuzzy string matching (faster than python-levenshtein)
+
+# --- Configuration & Environment ---
+pyyaml>=6.0,<7
+python-dotenv>=1.0,<2
+
+# --- Database ---
+# sqlite3 is stdlib — no install needed
+
+# --- Streamlit UI ---
+streamlit>=1.32,<2
+plotly>=5.18,<6              # Charts in Streamlit
+altair>=5.2,<6               # Alternative charting
+
+# --- Scheduling (local dev) ---
+apscheduler>=3.10,<4
+
+# --- Logging ---
+loguru>=0.7,<1
+
+# --- Progress ---
+tqdm>=4.66,<5
+
+# --- Dev / Security ---
+pre-commit>=3.6,<4
+detect-secrets>=1.4,<2
+
+# --- Testing ---
+pytest>=8.0,<9
+pytest-cov>=4.1,<5
+responses>=0.25,<1           # Mock HTTP for tests

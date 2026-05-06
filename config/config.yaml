@@ -1,0 +1,182 @@
+# =============================================================================
+# gsa-contract-tracker — Central Configuration
+# All pipeline scripts and the app read from this file.
+# Do NOT put credentials here. Use .env for secrets.
+# =============================================================================
+
+project:
+  name: gsa-contract-tracker
+  version: "0.1.0"
+  description: "Dashboard tracking GSA contract vehicle cancellations and changes"
+
+database:
+  path: db/contracts.db
+
+# =============================================================================
+# GSA eLibrary — contract vehicle source data
+# =============================================================================
+elib:
+  base_url: https://www.gsaelibrary.gsa.gov
+  home_url: https://www.gsaelibrary.gsa.gov/ElibMain/home.do
+
+  # XPath to the vehicle table on the home page.
+  # Used by fetch_elib.py to discover all vehicle CSV links dynamically.
+  vehicle_table_xpath: /html/body/div[1]/table[2]/tbody/tr[3]/td[3]/table/tbody/tr/td/form/table
+
+  # Base URL for direct CSV downloads
+  csv_base_url: https://gsaelibrary.gsa.gov/elib_contracts
+
+  # ---------------------------------------------------------------------------
+  # Vehicle registry — add new vehicles here to enable them.
+  # 'enabled: false' vehicles are stored in contract_vehicles table but
+  # their pipelines are skipped until flipped to true.
+  # ---------------------------------------------------------------------------
+  vehicles:
+    MAS:
+      name: Multiple Award Schedule
+      csv_url: https://gsaelibrary.gsa.gov/elib_contracts/schedule_MAS.csv
+      enabled: true
+      refresh: daily
+      notes: "Primary GSA schedule. ~51k vendors."
+
+    BPA:
+      name: Blanket Purchase Agreement
+      # BPA data is fetched from eLib SIN details pages, not a single CSV.
+      # The discovery scraper populates this dynamically.
+      csv_url: null
+      sin_details_base: https://www.gsaelibrary.gsa.gov/ElibMain/sinDetails.do
+      enabled: true
+      refresh: daily
+      notes: "BPA data lives under individual SIN detail pages."
+
+    OASIS_SB:
+      name: OASIS Small Business
+      csv_url: https://gsaelibrary.gsa.gov/elib_contracts/schedule_OASIS+SB.csv
+      enabled: false
+      refresh: daily
+      notes: "Placeholder — enable when scope expands."
+
+    ALLIANT_3:
+      name: Alliant 3
+      csv_url: https://gsaelibrary.gsa.gov/elib_contracts/schedule_ALLIANT_3.csv
+      enabled: false
+      refresh: daily
+      notes: "Placeholder — enable when scope expands."
+
+# =============================================================================
+# USASpending — bulk termination data
+# =============================================================================
+usaspending:
+  archive_base: https://files.usaspending.gov/award_data_archive/
+  agency_codes_url: https://files.usaspending.gov/reference_data/agency_codes.csv
+
+  # Fiscal years to pull. FY2025 captures the current cancellation wave.
+  # Add earlier years here to backfill historical data.
+  fiscal_years: [2025, 2026]
+
+  # action_type_code values that indicate a termination.
+  # Only rows with these codes are kept; all other modifications are discarded.
+  termination_codes:
+    E: "Terminate for Default (complete or partial)"
+    F: "Terminate for Convenience (complete or partial)"
+    X: "Terminate for Cause"
+
+  # Local directory for per-agency/FY checkpoint CSVs (gitignored)
+  checkpoint_dir: raw_data/bulk_checkpoints
+
+  # USASpending contract pricing type codes → human-readable labels
+  pricing_types:
+    J: Firm Fixed Price
+    Y: Time & Materials
+    Z: Labor Hours
+    U: Cost Plus Fixed Fee
+    V: Cost Plus Award Fee
+    S: Cost No Fee
+    R: Cost Plus Incentive Fee
+    A: Fixed Price Redetermination
+    B: Fixed Price Award Fee
+    K: Combined Fixed Price and Cost
+    L: "Cost Plus Fixed Fee, Letter Contract"
+    M: "Time & Materials, Letter Contract"
+
+# =============================================================================
+# Change Detection — controls how daily eLib diffs are evaluated
+# =============================================================================
+change_detection:
+  # ---------------------------------------------------------------------------
+  # Levenshtein / fuzzy thresholds for text fields.
+  # A change is only logged if BOTH conditions are exceeded:
+  #   - absolute distance > levenshtein_threshold  (catches short-string noise)
+  #   - ratio > levenshtein_ratio_threshold        (catches long-string noise)
+  # Example: "123 Main St" vs "123 Main Street" = distance 4, ratio 0.27
+  # With threshold=5, this would be IGNORED. Adjust as needed.
+  # ---------------------------------------------------------------------------
+  levenshtein_threshold: 5
+  levenshtein_ratio_threshold: 0.15   # 15% of the longer string's length
+
+  # Fields where ANY change is always logged — Levenshtein is NOT applied.
+  # These are business-critical fields where even small changes matter.
+  high_priority_fields:
+    - contract_number
+    - closed_for_new_award
+    - option_period_end_date
+    - ultimate_contract_end_date
+    - small_business
+    - other_than_small_business
+    - woman_owned
+    - wosb
+    - edwosb
+    - veteran_owned
+    - sdvosb
+    - small_disadvantaged
+    - eight_a
+    - eight_a_sole_source
+    - hub_zone
+    - sam_uei
+
+  # Fields where Levenshtein filtering is applied before logging a change.
+  fuzzy_fields:
+    - vendor_name
+    - address_1
+    - address_2
+    - city
+    - state
+    - zip
+    - phone
+    - email
+    - url
+
+  # SIN fields — always treated as high-priority, handled by SIN diff logic
+  # (not field-level diff — SINs are a set, so we diff adds/removes)
+
+# =============================================================================
+# Cancellation Pending — logic for flagging contracts in the lag window
+# =============================================================================
+cancellation_pending:
+  # Observed average lag between USASpending termination record appearing
+  # and eLibrary removing the contract from its CSV.
+  expected_lag_days: 45
+
+  # Contracts with ultimate_contract_end_date within this window are
+  # flagged as "Expiring Soon" (no termination record required).
+  expiring_soon_days: 90
+
+# =============================================================================
+# GSA D2D (Data to Decisions) — sales reporting
+# =============================================================================
+d2d:
+  enabled: false       # Set to true when access method is confirmed
+  base_url: https://d2d.gsa.gov
+  report_slug: fas-schedule-sales-query-plus-ssq
+  # join_key: vendor + contract_number + sin
+  notes: >
+    D2D captures actual reported GSA sales and is more accurate than
+    USASpending for micro-purchases. Access method (API vs. manual export
+    vs. session-based scrape) TBD — credentials go in .env, never here.
+
+# =============================================================================
+# Scheduling — cron expressions for GitHub Actions workflows
+# =============================================================================
+scheduling:
+  daily_cron: "0 9 * * *"    # 9 AM UTC = ~5 AM ET (eLibrary daily refresh)
+  monthly_cron: "0 8 1 * *"  # 8 AM UTC first of month (USASpending update)

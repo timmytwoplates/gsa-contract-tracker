@@ -1,0 +1,62 @@
+# =============================================================================
+# Pre-commit hooks — run automatically before every git commit.
+# Prevents credentials, bad code, and formatting issues from entering the repo.
+#
+# SETUP (run once after cloning):
+#   pip install pre-commit detect-secrets
+#   pre-commit install
+#   detect-secrets scan > .secrets.baseline   # initialize approved baseline
+#
+# MANUAL RUN:
+#   pre-commit run --all-files
+# =============================================================================
+
+repos:
+  # ---------------------------------------------------------------------------
+  # detect-secrets: blocks commits containing credentials, tokens, passwords
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: |
+          (?x)^(
+            .env.template|
+            requirements.txt
+          )$
+
+  # ---------------------------------------------------------------------------
+  # Standard file hygiene
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=50000"]      # warn on files > 50MB
+      - id: detect-private-key       # hard block on private keys
+      - id: check-ast                # Python syntax check
+      - id: debug-statements         # catch leftover breakpoint()/pdb calls
+
+  # ---------------------------------------------------------------------------
+  # Python formatting (non-blocking on first pass — just formats)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/psf/black
+    rev: 26.3.1
+    hooks:
+      - id: black
+        language_version: python3
+
+  # ---------------------------------------------------------------------------
+  # Import sorting
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pycqa/isort
+    rev: 9.0.0a3
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
