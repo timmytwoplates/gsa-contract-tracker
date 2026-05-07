@@ -8,6 +8,16 @@ Deploy on Streamlit Community Cloud:
     Point to this file in your Streamlit Cloud project settings.
 """
 
+import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path so 'app' module is importable.
+# Streamlit adds the script directory (app/) to sys.path, not the project root.
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+
 import streamlit as st
 
 st.set_page_config(
@@ -17,8 +27,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from app.db import get_summary_stats, get_terminations_by_reason, get_terminations_trend
-from app.db import get_active_vehicles
+from app.db import (
+    get_active_vehicles,
+    get_summary_stats,
+    get_terminations_by_reason,
+    get_terminations_trend,
+)
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -51,8 +65,10 @@ try:
     stats = get_summary_stats()
 except Exception as e:
     st.error(f"Could not load data: {e}")
-    st.info("Make sure the database has been bootstrapped and populated. "
-            "Run `python -m pipeline.bootstrap` then `python -m pipeline.fetch_elib`.")
+    st.info(
+        "Make sure the database has been bootstrapped and populated. "
+        "Run `python -m pipeline.bootstrap` then `python -m pipeline.fetch_elib`."
+    )
     st.stop()
 
 # KPI row
@@ -61,9 +77,11 @@ col1.metric("Total Terminations", f"{stats['total_terminations']:,}")
 col2.metric("Unique Contracts", f"{stats['unique_contracts']:,}")
 col3.metric(
     "Net $ Deobligated",
-    f"${abs(stats['net_obligation']) / 1e6:.1f}M"
-    if abs(stats["net_obligation"]) >= 1e6
-    else f"${abs(stats['net_obligation']):,.0f}",
+    (
+        f"${abs(stats['net_obligation']) / 1e6:.1f}M"
+        if abs(stats["net_obligation"]) >= 1e6
+        else f"${abs(stats['net_obligation']):,.0f}"
+    ),
 )
 col4.metric("⚠️ Cancellation Pending", f"{stats['cancellation_pending']:,}")
 
@@ -72,9 +90,23 @@ st.divider()
 # Second row
 col5, col6, col7, col8 = st.columns(4)
 col5.metric("Active MAS/BPA Vendors", f"{stats['active_vendors']:,}")
-col6.metric("", "")  # placeholder for D2D metric (future)
-col7.metric("eLib Last Updated", stats["last_elib_refresh"][:10] if stats["last_elib_refresh"] != "Never" else "Never")
-col8.metric("USASpending Last Updated", stats["last_usaspending_refresh"][:10] if stats["last_usaspending_refresh"] != "Never" else "Never")
+col6.metric("D2D Sales", "Coming soon", help="GSA D2D sales integration planned")
+col7.metric(
+    "eLib Last Updated",
+    (
+        stats["last_elib_refresh"][:10]
+        if stats["last_elib_refresh"] != "Never"
+        else "Never"
+    ),
+)
+col8.metric(
+    "USASpending Last Updated",
+    (
+        stats["last_usaspending_refresh"][:10]
+        if stats["last_usaspending_refresh"] != "Never"
+        else "Never"
+    ),
+)
 
 st.divider()
 
@@ -86,6 +118,7 @@ with col_left:
     reason_df = get_terminations_by_reason()
     if not reason_df.empty:
         import plotly.express as px
+
         fig = px.pie(
             reason_df,
             names="termination_reason",
@@ -102,6 +135,7 @@ with col_right:
     trend_df = get_terminations_trend(vehicle_filter)
     if not trend_df.empty:
         import plotly.express as px
+
         fig = px.bar(
             trend_df,
             x="month",

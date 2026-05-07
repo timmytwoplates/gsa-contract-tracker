@@ -209,7 +209,7 @@ def discover_vehicle_csvs(home_url: str, xpath_hint: str) -> dict[str, str]:
         logger.error(f"Failed to fetch eLib home page: {e}")
         return {}
 
-    soup = BeautifulSoup(resp.text, "lxml")
+    soup = BeautifulSoup(resp.text, "html.parser")
     discovered: dict[str, str] = {}
 
     for link in soup.find_all("a", href=True):
@@ -688,7 +688,8 @@ def main() -> None:
             ).fetchone()
             if not row:
                 logger.error(
-                    f"Vehicle '{code}' not in contract_vehicles. Run bootstrap first."
+                    f"Vehicle '{code}' not in contract_vehicles table. "
+                    "Run 'python -m pipeline.bootstrap' to seed it."
                 )
                 continue
             vehicle_id = row["id"]
