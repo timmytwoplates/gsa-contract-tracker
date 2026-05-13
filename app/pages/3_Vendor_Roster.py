@@ -4,8 +4,12 @@ Contracts flagged as terminated in USASpending are highlighted.
 """
 
 import streamlit as st
+import pandas as pd
 
 from app.db import get_active_vehicles, get_vendor_roster
+
+# Streamlit Styler has a row limit; beyond this, skip .style to avoid errors.
+STYLE_LIMIT = 5_000
 
 st.set_page_config(page_title="Vendor Roster", layout="wide")
 st.title("🏢 Vendor Roster")
@@ -39,9 +43,9 @@ else:
             f"⚠️ {len(flagged)} vendor(s) have a USASpending termination record."
         )
 
-    # Highlight rows with termination flag
+    # Highlight rows with termination flag (uses renamed column name)
     def highlight_terminated(row):
-        if row.get("termination_flag") == 1:
+        if row.get("⚠️ Terminated") == 1:
             return ["background-color: #fff3cd"] * len(row)
         return [""] * len(row)
 
@@ -78,11 +82,21 @@ else:
         }
     )
 
-    st.dataframe(
-        display_df.style.apply(highlight_terminated, axis=1),
-        use_container_width=True,
-        hide_index=True,
-    )
+    if len(display_df) <= STYLE_LIMIT:
+        st.dataframe(
+            display_df.style.apply(highlight_terminated, axis=1),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.caption(
+            f"Styling disabled for large result sets (>{STYLE_LIMIT:,} rows)."
+        )
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True,
+        )
 
     csv_data = df.to_csv(index=False).encode("utf-8")
     st.download_button(
