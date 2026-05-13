@@ -19,6 +19,7 @@ if str(_project_root) not in sys.path:
 
 
 import streamlit as st
+import plotly.express as px
 
 st.set_page_config(
     page_title="GSA Contract Tracker",
@@ -117,8 +118,6 @@ with col_left:
     st.subheader("Terminations by Reason")
     reason_df = get_terminations_by_reason()
     if not reason_df.empty:
-        import plotly.express as px
-
         fig = px.pie(
             reason_df,
             names="termination_reason",
@@ -134,8 +133,6 @@ with col_right:
     st.subheader("Monthly Termination Trend")
     trend_df = get_terminations_trend(vehicle_filter)
     if not trend_df.empty:
-        import plotly.express as px
-
         fig = px.bar(
             trend_df,
             x="month",
