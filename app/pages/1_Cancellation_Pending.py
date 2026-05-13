@@ -20,9 +20,9 @@ st.caption(
 vehicles = ["All"] + get_active_vehicles()
 vehicle_filter = st.selectbox("Filter by vehicle", vehicles)
 
-df = get_cancellation_pending()
-if vehicle_filter != "All":
-    df = df[df["vehicle"] == vehicle_filter]
+df = get_cancellation_pending(
+    vehicle=vehicle_filter if vehicle_filter != "All" else None
+)
 
 if df.empty:
     st.success("No pending cancellations detected.")

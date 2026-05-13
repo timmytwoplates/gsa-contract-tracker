@@ -148,13 +148,23 @@ def get_terminations_trend(vehicle_filter: str | None = None) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def get_cancellation_pending() -> pd.DataFrame:
+def get_cancellation_pending(vehicle: str | None = None) -> pd.DataFrame:
     """
     Contracts that appear in USASpending terminations but are still
     active in the eLibrary vendor roster.
     These are in the lag window (typically ~45 days).
+    Optionally filtered by vehicle code.
     """
-    return query("""
+    conditions = ["v.status = 'active'"]
+    params: list = []
+
+    if vehicle:
+        conditions.append("cv.code = ?")
+        params.append(vehicle)
+
+    where = " AND ".join(conditions)
+
+    return query(f"""
         SELECT
             v.contract_number,
             v.vendor_name,
@@ -173,9 +183,9 @@ def get_cancellation_pending() -> pd.DataFrame:
         INNER JOIN terminations t
             ON UPPER(TRIM(t.piid)) = UPPER(TRIM(v.contract_number))
         INNER JOIN contract_vehicles cv ON v.vehicle_id = cv.id
-        WHERE v.status = 'active'
+        WHERE {where}
         ORDER BY t.termination_date DESC
-    """)
+    """, tuple(params))
 
 
 # ---------------------------------------------------------------------------
