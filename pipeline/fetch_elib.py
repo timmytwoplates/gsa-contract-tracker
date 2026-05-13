@@ -320,18 +320,20 @@ def split_vendor_sins(
     vendor_df.large_category is a pipe-separated summary of all unique
     large categories for that contract (useful for UI filtering).
     """
-    # Build SIN map first
+    # Build SIN map using vectorized Pandas operations (no iterrows)
     sin_map: dict[str, set[tuple[str, str, str]]] = {}
     if "sin" in df.columns:
-        for _, row in df[
-            ["contract_number", "sin", "large_category", "sub_category"]
-        ].iterrows():
-            cn = row.get("contract_number", "")
-            sin = str(row.get("sin", "") or "").strip()
-            lc = str(row.get("large_category", "") or "").strip()
-            sc = str(row.get("sub_category", "") or "").strip()
-            if cn and sin:
-                sin_map.setdefault(cn, set()).add((sin, lc, sc))
+        sin_df = df[["contract_number", "sin", "large_category", "sub_category"]].copy()
+        sin_df["sin"] = sin_df["sin"].fillna("").astype(str).str.strip()
+        sin_df["large_category"] = sin_df["large_category"].fillna("").astype(str).str.strip()
+        sin_df["sub_category"] = sin_df["sub_category"].fillna("").astype(str).str.strip()
+        # Filter to rows with non-empty contract_number and sin
+        mask = sin_df["contract_number"].fillna("").astype(bool) & sin_df["sin"].astype(bool)
+        sin_df = sin_df[mask]
+        for cn, group in sin_df.groupby("contract_number"):
+            sin_map[cn] = set(
+                zip(group["sin"], group["large_category"], group["sub_category"])
+            )
 
     # Build vendor-level category summary
     if "sin" in df.columns and "large_category" in df.columns:
