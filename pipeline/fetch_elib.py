@@ -320,7 +320,7 @@ def split_vendor_sins(
     vendor_df.large_category is a pipe-separated summary of all unique
     large categories for that contract (useful for UI filtering).
     """
-    # Build SIN map using vectorized Pandas operations (no iterrows)
+    # Build SIN map using vectorized Pandas groupby operations
     sin_map: dict[str, set[tuple[str, str, str]]] = {}
     if "sin" in df.columns:
         sin_df = df[["contract_number", "sin", "large_category", "sub_category"]].copy()
