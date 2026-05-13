@@ -1,0 +1,47 @@
+# =============================================================================
+# Monthly USASpending Refresh — fetch bulk termination data from USASpending
+# Runs at 8 AM UTC on the 1st of each month per scheduling.monthly_cron in config/config.yaml
+# =============================================================================
+
+name: Monthly USASpending Refresh
+
+on:
+  schedule:
+    - cron: "0 8 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-terminations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run fetch_terminations pipeline
+        run: python -m pipeline.fetch_terminations
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add db/ raw_data/
+          git diff --cached --quiet || git commit -m "chore: monthly USASpending refresh $(date -u +%Y-%m-%d)"
+          git push
