@@ -10,6 +10,7 @@ Connection is cached via st.cache_resource so it's shared across rerenders.
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -101,6 +102,34 @@ def get_summary_stats() -> dict:
     stats["last_usaspending_refresh"] = row["completed_at"] if row else "Never"
 
     return stats
+
+
+def get_data_age_hours() -> dict[str, float | None]:
+    """Return age in hours for each data source since last successful refresh."""
+    conn = get_connection()
+    cur = conn.cursor()
+    now = datetime.utcnow()
+    ages: dict[str, float | None] = {}
+
+    for source, pattern in [("elib", "elib%"), ("usaspending", "usaspending")]:
+        row = cur.execute(
+            """
+            SELECT completed_at FROM refresh_log
+            WHERE source LIKE ? AND status = 'completed'
+            ORDER BY completed_at DESC LIMIT 1
+            """,
+            (pattern,),
+        ).fetchone()
+        if row and row["completed_at"]:
+            try:
+                completed = datetime.fromisoformat(row["completed_at"])
+                ages[source] = (now - completed).total_seconds() / 3600.0
+            except (ValueError, TypeError):
+                ages[source] = None
+        else:
+            ages[source] = None
+
+    return ages
 
 
 def get_terminations_by_reason() -> pd.DataFrame:

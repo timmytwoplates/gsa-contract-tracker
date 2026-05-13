@@ -30,6 +30,7 @@ st.set_page_config(
 
 from app.db import (
     get_active_vehicles,
+    get_data_age_hours,
     get_summary_stats,
     get_terminations_by_reason,
     get_terminations_trend,
@@ -71,6 +72,31 @@ except Exception as e:
         "Run `python -m pipeline.bootstrap` then `python -m pipeline.fetch_elib`."
     )
     st.stop()
+
+# Data freshness indicator
+_STALE_THRESHOLD_HOURS = 48
+
+data_ages = get_data_age_hours()
+_stale_sources = []
+for source_name, hours in data_ages.items():
+    if hours is None:
+        _stale_sources.append(f"**{source_name}**: never refreshed")
+    elif hours > _STALE_THRESHOLD_HOURS:
+        _stale_sources.append(f"**{source_name}**: {hours:.0f} hours ago")
+
+if _stale_sources:
+    st.warning(
+        "⚠️ **Stale data warning** — The following sources have not been "
+        f"refreshed in over {_STALE_THRESHOLD_HOURS} hours:\n\n"
+        + "\n".join(f"- {s}" for s in _stale_sources)
+        + "\n\nRun the pipeline to update."
+    )
+else:
+    _freshest = max(
+        (h for h in data_ages.values() if h is not None), default=None
+    )
+    if _freshest is not None:
+        st.success(f"✅ Data is fresh — last updated {_freshest:.1f} hours ago")
 
 # KPI row
 col1, col2, col3, col4 = st.columns(4)
