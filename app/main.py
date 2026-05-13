@@ -148,9 +148,11 @@ with col_left:
             reason_df,
             names="termination_reason",
             values="count",
+            title="Terminations by Reason",
             color_discrete_sequence=px.colors.qualitative.Set2,
         )
-        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+        fig.update_traces(textposition="inside", textinfo="percent+label")
+        fig.update_layout(margin=dict(t=40, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No termination data yet.")
@@ -163,10 +165,15 @@ with col_right:
             trend_df,
             x="month",
             y="terminations",
+            title="Monthly Termination Trend",
             color_discrete_sequence=["#d62728"],
             labels={"month": "Month", "terminations": "Terminations"},
         )
-        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+        fig.update_layout(
+            margin=dict(t=40, b=10, l=10, r=10),
+            xaxis_title="Month",
+            yaxis_title="Number of Terminations",
+        )
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No trend data yet.")
