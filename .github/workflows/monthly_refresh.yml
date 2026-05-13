@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
 jobs:
   fetch-terminations:
     runs-on: ubuntu-latest

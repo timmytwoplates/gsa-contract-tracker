@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
 jobs:
   fetch-elib:
     runs-on: ubuntu-latest
