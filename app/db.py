@@ -411,6 +411,48 @@ def get_large_categories(vehicle: str | None = None) -> list[str]:
     return df["large_category"].tolist()
 
 
+def get_setaside_breakdown(
+    vehicle: str | None = None,
+    status: str = "active",
+) -> pd.DataFrame:
+    """Count of vendors by set-aside category (small_business, sdvosb, eight_a)."""
+    conditions = ["v.status = ?"]
+    params: list = [status]
+    if vehicle:
+        conditions.append("cv.code = ?")
+        params.append(vehicle)
+    where = " AND ".join(conditions)
+    return query(
+        f"""
+        SELECT
+            SUM(CASE WHEN v.small_business = 1 THEN 1 ELSE 0 END) AS small_business,
+            SUM(CASE WHEN v.sdvosb = 1 THEN 1 ELSE 0 END) AS sdvosb,
+            SUM(CASE WHEN v.eight_a = 1 THEN 1 ELSE 0 END) AS eight_a,
+            COUNT(*) AS total
+        FROM mas_vendors v
+        INNER JOIN contract_vehicles cv ON v.vehicle_id = cv.id
+        WHERE {where}
+    """,
+        tuple(params),
+    )
+
+
+def get_daily_change_activity(days: int = 30) -> pd.DataFrame:
+    """Daily count of changes by type for a timeline bar chart."""
+    return query(
+        f"""
+        SELECT
+            DATE(cl.detected_at) AS date,
+            cl.change_type,
+            COUNT(*) AS count
+        FROM mas_change_log cl
+        WHERE cl.detected_at >= datetime('now', '-{days} days')
+        GROUP BY DATE(cl.detected_at), cl.change_type
+        ORDER BY date
+    """
+    )
+
+
 def get_departments() -> list[str]:
     df = query("""
         SELECT DISTINCT department FROM terminations

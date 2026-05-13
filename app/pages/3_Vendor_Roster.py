@@ -6,7 +6,7 @@ Contracts flagged as terminated in USASpending are highlighted.
 import streamlit as st
 import pandas as pd
 
-from app.db import get_active_vehicles, get_vendor_roster
+from app.db import get_active_vehicles, get_vendor_roster, get_setaside_breakdown
 
 # Streamlit Styler has a row limit; beyond this, skip .style to avoid errors.
 STYLE_LIMIT = 5_000
@@ -36,6 +36,18 @@ df = get_vendor_roster(
 if df.empty:
     st.info("No vendors match the selected filters.")
 else:
+    # Set-aside breakdown summary
+    sa_df = get_setaside_breakdown(vehicle=vehicle_filter, status=status_filter)
+    if not sa_df.empty:
+        sa = sa_df.iloc[0]
+        st.subheader("Set-Aside Breakdown")
+        sa_cols = st.columns(4)
+        sa_cols[0].metric("Total Vendors", f"{int(sa['total']):,}")
+        sa_cols[1].metric("Small Business", f"{int(sa['small_business']):,}")
+        sa_cols[2].metric("SDVOSB", f"{int(sa['sdvosb']):,}")
+        sa_cols[3].metric("8(a)", f"{int(sa['eight_a']):,}")
+        st.divider()
+
     flagged = df[df["termination_flag"] == 1]
     st.metric("Vendors", len(df))
     if len(flagged):
