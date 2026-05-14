@@ -20,7 +20,7 @@ with st.expander("Filters", expanded=True):
         vehicle = st.selectbox("Vehicle", vehicles)
         vehicle_filter = None if vehicle == "All" else vehicle
 
-        codes = {"All": None, "F — Convenience": "F", "E — Default": "E", "X — Cause": "X"}
+        codes = {"All": None, "F — Convenience": "F", "E — Default": "E", "X — Cause": "X", "N — No-Cost Settlement": "N"}
         code_label = st.selectbox("Termination Type", list(codes.keys()))
         code_filter = codes[code_label]
 

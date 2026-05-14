@@ -4,8 +4,12 @@ Contracts flagged as terminated in USASpending are highlighted.
 """
 
 import streamlit as st
+import pandas as pd
 
-from app.db import get_active_vehicles, get_vendor_roster
+from app.db import get_active_vehicles, get_vendor_roster, get_setaside_breakdown
+
+# Streamlit Styler has a row limit; beyond this, skip .style to avoid errors.
+STYLE_LIMIT = 5_000
 
 st.set_page_config(page_title="Vendor Roster", layout="wide")
 st.title("🏢 Vendor Roster")
@@ -32,6 +36,18 @@ df = get_vendor_roster(
 if df.empty:
     st.info("No vendors match the selected filters.")
 else:
+    # Set-aside breakdown summary
+    sa_df = get_setaside_breakdown(vehicle=vehicle_filter, status=status_filter)
+    if not sa_df.empty:
+        sa = sa_df.iloc[0]
+        st.subheader("Set-Aside Breakdown")
+        sa_cols = st.columns(4)
+        sa_cols[0].metric("Total Vendors", f"{int(sa['total']):,}")
+        sa_cols[1].metric("Small Business", f"{int(sa['small_business']):,}")
+        sa_cols[2].metric("SDVOSB", f"{int(sa['sdvosb']):,}")
+        sa_cols[3].metric("8(a)", f"{int(sa['eight_a']):,}")
+        st.divider()
+
     flagged = df[df["termination_flag"] == 1]
     st.metric("Vendors", len(df))
     if len(flagged):
@@ -39,9 +55,9 @@ else:
             f"⚠️ {len(flagged)} vendor(s) have a USASpending termination record."
         )
 
-    # Highlight rows with termination flag
+    # Highlight rows with termination flag (uses renamed column name)
     def highlight_terminated(row):
-        if row.get("termination_flag") == 1:
+        if row.get("⚠️ Terminated") == 1:
             return ["background-color: #fff3cd"] * len(row)
         return [""] * len(row)
 
@@ -78,11 +94,21 @@ else:
         }
     )
 
-    st.dataframe(
-        display_df.style.apply(highlight_terminated, axis=1),
-        use_container_width=True,
-        hide_index=True,
-    )
+    if len(display_df) <= STYLE_LIMIT:
+        st.dataframe(
+            display_df.style.apply(highlight_terminated, axis=1),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.caption(
+            f"Styling disabled for large result sets (>{STYLE_LIMIT:,} rows)."
+        )
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True,
+        )
 
     csv_data = df.to_csv(index=False).encode("utf-8")
     st.download_button(

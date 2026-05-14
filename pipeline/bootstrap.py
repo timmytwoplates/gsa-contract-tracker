@@ -140,6 +140,10 @@ def create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_mas_vendors_vehicle
             ON mas_vendors(vehicle_id)
     """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_mas_vendors_vehicle_status
+            ON mas_vendors(vehicle_id, status)
+    """)
 
     # -------------------------------------------------------------------------
     # mas_vendor_sins -- SINs are many-per-vendor; stored separately.

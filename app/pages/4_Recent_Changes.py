@@ -8,8 +8,9 @@ already suppressed before this view — every row here is a real change.
 
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
-from app.db import get_recent_changes, get_active_vehicles
+from app.db import get_recent_changes, get_active_vehicles, get_daily_change_activity
 
 st.set_page_config(page_title="Recent Changes", layout="wide")
 st.title("🔄 Recent Changes")
@@ -57,6 +58,37 @@ else:
         ("FIELD_UPDATE", "Field Updates"),
     ]):
         cols[i].metric(label, type_counts.get(ctype, 0))
+
+    st.divider()
+
+    # Daily activity timeline chart
+    st.subheader("Daily Activity Timeline")
+    activity_df = get_daily_change_activity(days=days)
+    if not activity_df.empty:
+        fig = px.bar(
+            activity_df,
+            x="date",
+            y="count",
+            color="change_type",
+            title="Changes per Day",
+            labels={"date": "Date", "count": "Changes", "change_type": "Type"},
+            color_discrete_map={
+                "ADD": "#28a745",
+                "REMOVE": "#dc3545",
+                "SIN_ADD": "#007bff",
+                "SIN_REMOVE": "#ffc107",
+                "FIELD_UPDATE": "#6c757d",
+            },
+        )
+        fig.update_layout(
+            margin=dict(t=40, b=10, l=10, r=10),
+            xaxis_title="Date",
+            yaxis_title="Number of Changes",
+            barmode="stack",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No daily activity data available.")
 
     st.divider()
 

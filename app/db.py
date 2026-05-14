@@ -10,13 +10,14 @@ Connection is cached via st.cache_resource so it's shared across rerenders.
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 import yaml
 
-CONFIG_PATH = Path("config/config.yaml")
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
 
 
 def _load_config() -> dict:
@@ -31,7 +32,8 @@ def get_connection() -> sqlite3.Connection:
     Called once per app session; Streamlit reuses it across rerenders.
     """
     config = _load_config()
-    db_path = Path(config["database"]["path"])
+    _project_root = Path(__file__).resolve().parent.parent
+    db_path = _project_root / config["database"]["path"]
 
     if not db_path.exists():
         st.error(
@@ -103,6 +105,34 @@ def get_summary_stats() -> dict:
     return stats
 
 
+def get_data_age_hours() -> dict[str, float | None]:
+    """Return age in hours for each data source since last successful refresh."""
+    conn = get_connection()
+    cur = conn.cursor()
+    now = datetime.utcnow()
+    ages: dict[str, float | None] = {}
+
+    for source, pattern in [("elib", "elib%"), ("usaspending", "usaspending")]:
+        row = cur.execute(
+            """
+            SELECT completed_at FROM refresh_log
+            WHERE source LIKE ? AND status = 'completed'
+            ORDER BY completed_at DESC LIMIT 1
+            """,
+            (pattern,),
+        ).fetchone()
+        if row and row["completed_at"]:
+            try:
+                completed = datetime.fromisoformat(row["completed_at"])
+                ages[source] = (now - completed).total_seconds() / 3600.0
+            except (ValueError, TypeError):
+                ages[source] = None
+        else:
+            ages[source] = None
+
+    return ages
+
+
 def get_terminations_by_reason() -> pd.DataFrame:
     return query("""
         SELECT termination_reason, COUNT(*) as count,
@@ -148,13 +178,23 @@ def get_terminations_trend(vehicle_filter: str | None = None) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def get_cancellation_pending() -> pd.DataFrame:
+def get_cancellation_pending(vehicle: str | None = None) -> pd.DataFrame:
     """
     Contracts that appear in USASpending terminations but are still
     active in the eLibrary vendor roster.
     These are in the lag window (typically ~45 days).
+    Optionally filtered by vehicle code.
     """
-    return query("""
+    conditions = ["v.status = 'active'"]
+    params: list = []
+
+    if vehicle:
+        conditions.append("cv.code = ?")
+        params.append(vehicle)
+
+    where = " AND ".join(conditions)
+
+    return query(f"""
         SELECT
             v.contract_number,
             v.vendor_name,
@@ -173,9 +213,9 @@ def get_cancellation_pending() -> pd.DataFrame:
         INNER JOIN terminations t
             ON UPPER(TRIM(t.piid)) = UPPER(TRIM(v.contract_number))
         INNER JOIN contract_vehicles cv ON v.vehicle_id = cv.id
-        WHERE v.status = 'active'
+        WHERE {where}
         ORDER BY t.termination_date DESC
-    """)
+    """, tuple(params))
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +410,48 @@ def get_large_categories(vehicle: str | None = None) -> list[str]:
             ORDER BY large_category
             """)
     return df["large_category"].tolist()
+
+
+def get_setaside_breakdown(
+    vehicle: str | None = None,
+    status: str = "active",
+) -> pd.DataFrame:
+    """Count of vendors by set-aside category (small_business, sdvosb, eight_a)."""
+    conditions = ["v.status = ?"]
+    params: list = [status]
+    if vehicle:
+        conditions.append("cv.code = ?")
+        params.append(vehicle)
+    where = " AND ".join(conditions)
+    return query(
+        f"""
+        SELECT
+            SUM(CASE WHEN v.small_business = 1 THEN 1 ELSE 0 END) AS small_business,
+            SUM(CASE WHEN v.sdvosb = 1 THEN 1 ELSE 0 END) AS sdvosb,
+            SUM(CASE WHEN v.eight_a = 1 THEN 1 ELSE 0 END) AS eight_a,
+            COUNT(*) AS total
+        FROM mas_vendors v
+        INNER JOIN contract_vehicles cv ON v.vehicle_id = cv.id
+        WHERE {where}
+    """,
+        tuple(params),
+    )
+
+
+def get_daily_change_activity(days: int = 30) -> pd.DataFrame:
+    """Daily count of changes by type for a timeline bar chart."""
+    return query(
+        f"""
+        SELECT
+            DATE(cl.detected_at) AS date,
+            cl.change_type,
+            COUNT(*) AS count
+        FROM mas_change_log cl
+        WHERE cl.detected_at >= datetime('now', '-{days} days')
+        GROUP BY DATE(cl.detected_at), cl.change_type
+        ORDER BY date
+    """
+    )
 
 
 def get_departments() -> list[str]:

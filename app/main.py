@@ -19,6 +19,7 @@ if str(_project_root) not in sys.path:
 
 
 import streamlit as st
+import plotly.express as px
 
 st.set_page_config(
     page_title="GSA Contract Tracker",
@@ -29,6 +30,7 @@ st.set_page_config(
 
 from app.db import (
     get_active_vehicles,
+    get_data_age_hours,
     get_summary_stats,
     get_terminations_by_reason,
     get_terminations_trend,
@@ -70,6 +72,31 @@ except Exception as e:
         "Run `python -m pipeline.bootstrap` then `python -m pipeline.fetch_elib`."
     )
     st.stop()
+
+# Data freshness indicator
+_STALE_THRESHOLD_HOURS = 48
+
+data_ages = get_data_age_hours()
+_stale_sources = []
+for source_name, hours in data_ages.items():
+    if hours is None:
+        _stale_sources.append(f"**{source_name}**: never refreshed")
+    elif hours > _STALE_THRESHOLD_HOURS:
+        _stale_sources.append(f"**{source_name}**: {hours:.0f} hours ago")
+
+if _stale_sources:
+    st.warning(
+        "⚠️ **Stale data warning** — The following sources have not been "
+        f"refreshed in over {_STALE_THRESHOLD_HOURS} hours:\n\n"
+        + "\n".join(f"- {s}" for s in _stale_sources)
+        + "\n\nRun the pipeline to update."
+    )
+else:
+    _freshest = max(
+        (h for h in data_ages.values() if h is not None), default=None
+    )
+    if _freshest is not None:
+        st.success(f"✅ Data is fresh — last updated {_freshest:.1f} hours ago")
 
 # KPI row
 col1, col2, col3, col4 = st.columns(4)
@@ -117,15 +144,15 @@ with col_left:
     st.subheader("Terminations by Reason")
     reason_df = get_terminations_by_reason()
     if not reason_df.empty:
-        import plotly.express as px
-
         fig = px.pie(
             reason_df,
             names="termination_reason",
             values="count",
+            title="Terminations by Reason",
             color_discrete_sequence=px.colors.qualitative.Set2,
         )
-        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+        fig.update_traces(textposition="inside", textinfo="percent+label")
+        fig.update_layout(margin=dict(t=40, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No termination data yet.")
@@ -134,16 +161,19 @@ with col_right:
     st.subheader("Monthly Termination Trend")
     trend_df = get_terminations_trend(vehicle_filter)
     if not trend_df.empty:
-        import plotly.express as px
-
         fig = px.bar(
             trend_df,
             x="month",
             y="terminations",
+            title="Monthly Termination Trend",
             color_discrete_sequence=["#d62728"],
             labels={"month": "Month", "terminations": "Terminations"},
         )
-        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+        fig.update_layout(
+            margin=dict(t=40, b=10, l=10, r=10),
+            xaxis_title="Month",
+            yaxis_title="Number of Terminations",
+        )
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No trend data yet.")
