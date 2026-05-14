@@ -59,25 +59,63 @@ else:
             f"${total / 1e6:.1f}M" if abs(total) >= 1e6 else f"${total:,.0f}",
         )
 
-    display_cols = [
-        "contract_number", "vendor_name", "vehicle", "large_category",
-        "termination_reason", "termination_date", "federal_action_obligation",
-        "department", "sub_agency", "set_aside", "place_state", "link",
-    ]
-    display_df = df[[c for c in display_cols if c in df.columns]].rename(columns={
+    # All available columns with friendly names
+    all_columns = {
         "contract_number": "Contract #",
         "vendor_name": "Vendor",
         "vehicle": "Vehicle",
         "large_category": "Category",
+        "sub_category": "Sub-Category",
+        "termination_code": "Term. Code",
         "termination_reason": "Reason",
         "termination_date": "Date",
+        "mod_number": "Mod #",
+        "mod_count": "# of Mods",
         "federal_action_obligation": "Obligation ($)",
+        "total_obligated": "Total Obligated ($)",
+        "ceiling": "Ceiling ($)",
         "department": "Agency",
         "sub_agency": "Sub-Agency",
+        "awarding_office": "Contracting Office",
+        "contractor": "Contractor",
+        "contractor_parent": "Parent Company",
+        "naics": "NAICS",
+        "psc": "PSC",
+        "pricing": "Pricing Type",
         "set_aside": "Set-Aside",
         "place_state": "State",
+        "fiscal_year": "Fiscal Year",
+        "cancellation_description": "Description",
         "link": "Link",
-    })
+    }
+
+    # Only show columns that exist in the data
+    available_cols = {k: v for k, v in all_columns.items() if k in df.columns}
+
+    # Default visible columns
+    default_cols = [
+        "contract_number", "vendor_name", "vehicle", "large_category",
+        "termination_reason", "termination_date", "mod_count",
+        "federal_action_obligation", "awarding_office",
+        "department", "set_aside", "place_state", "link",
+    ]
+    default_cols = [c for c in default_cols if c in available_cols]
+
+    # Column selector
+    with st.expander("Configure Columns", expanded=False):
+        selected_cols = st.multiselect(
+            "Choose columns to display",
+            options=list(available_cols.keys()),
+            default=default_cols,
+            format_func=lambda x: available_cols.get(x, x),
+        )
+
+    if not selected_cols:
+        selected_cols = default_cols
+
+    display_df = df[[c for c in selected_cols if c in df.columns]].rename(
+        columns=available_cols
+    )
 
     st.dataframe(display_df, use_container_width=True, hide_index=True)
 

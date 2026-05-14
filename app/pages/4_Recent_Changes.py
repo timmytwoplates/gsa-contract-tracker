@@ -121,11 +121,17 @@ else:
     if "Detected" in display_df.columns:
         display_df["Detected"] = display_df["Detected"].str[:19]
 
-    st.dataframe(
-        display_df.style.apply(highlight_change, axis=1),
-        use_container_width=True,
-        hide_index=True,
-    )
+    STYLE_LIMIT = 3_000
+    cell_count = len(display_df) * len(display_df.columns)
+    if cell_count <= STYLE_LIMIT:
+        st.dataframe(
+            display_df.style.apply(highlight_change, axis=1),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.caption(f"Styling disabled for large result sets (>{STYLE_LIMIT:,} cells).")
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
 
     csv_data = df.to_csv(index=False).encode("utf-8")
     st.download_button(

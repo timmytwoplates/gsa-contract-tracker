@@ -103,29 +103,66 @@ else:
 
     st.divider()
 
-    # Format dollar amounts
-    if "federal_action_obligation" in df.columns:
-        df["obligation_fmt"] = df["federal_action_obligation"].apply(
-            lambda x: f"${x:,.0f}" if pd.notna(x) else ""
+    # All available columns with friendly names
+    all_columns = {
+        "contract_number": "Contract #",
+        "vendor_name": "Vendor",
+        "vehicle": "Vehicle",
+        "large_category": "Category",
+        "sub_category": "Sub-Category",
+        "termination_code": "Term. Code",
+        "termination_reason": "Reason",
+        "termination_date": "Termination Date",
+        "mod_number": "Mod #",
+        "mod_count": "# of Mods",
+        "federal_action_obligation": "Obligation ($)",
+        "total_obligated": "Total Obligated ($)",
+        "department": "Agency",
+        "sub_agency": "Sub-Agency",
+        "awarding_office": "Contracting Office",
+        "contractor": "Contractor",
+        "contractor_parent": "Parent Company",
+        "vendor_state": "Vendor State",
+        "ultimate_contract_end_date": "End Date",
+        "naics": "NAICS",
+        "set_aside": "Set-Aside",
+        "cancellation_description": "Description",
+        "link": "USASpending Link",
+    }
+
+    available_cols = {k: v for k, v in all_columns.items() if k in df.columns}
+
+    default_cols = [
+        "contract_number", "vendor_name", "vehicle", "large_category",
+        "termination_reason", "termination_date", "mod_count",
+        "federal_action_obligation", "awarding_office",
+        "department", "ultimate_contract_end_date", "link",
+    ]
+    default_cols = [c for c in default_cols if c in available_cols]
+
+    with st.expander("Configure Columns", expanded=False):
+        selected_cols = st.multiselect(
+            "Choose columns to display",
+            options=list(available_cols.keys()),
+            default=default_cols,
+            format_func=lambda x: available_cols.get(x, x),
         )
 
+    if not selected_cols:
+        selected_cols = default_cols
+
+    # Format dollar amounts for display
+    display_df = df[[c for c in selected_cols if c in df.columns]].copy()
+    for col in ["federal_action_obligation", "total_obligated"]:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].apply(
+                lambda x: f"${x:,.0f}" if pd.notna(x) else ""
+            )
+
+    display_df = display_df.rename(columns=available_cols)
+
     st.dataframe(
-        df[[
-            "contract_number", "vendor_name", "vehicle", "large_category",
-            "termination_reason", "termination_date", "obligation_fmt",
-            "department", "ultimate_contract_end_date", "link",
-        ]].rename(columns={
-            "contract_number": "Contract #",
-            "vendor_name": "Vendor",
-            "vehicle": "Vehicle",
-            "large_category": "Category",
-            "termination_reason": "Reason",
-            "termination_date": "Termination Date",
-            "obligation_fmt": "Obligation",
-            "department": "Agency",
-            "ultimate_contract_end_date": "End Date",
-            "link": "USASpending Link",
-        }),
+        display_df,
         use_container_width=True,
         hide_index=True,
     )

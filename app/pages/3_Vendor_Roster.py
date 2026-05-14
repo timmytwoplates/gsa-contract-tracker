@@ -61,37 +61,64 @@ else:
             return ["background-color: #fff3cd"] * len(row)
         return [""] * len(row)
 
-    display_cols = [
-        "contract_number",
-        "vendor_name",
-        "vehicle",
-        "large_category",
-        "state",
-        "option_period_end_date",
-        "ultimate_contract_end_date",
-        "small_business",
-        "sdvosb",
-        "eight_a",
-        "termination_flag",
-        "termination_date",
+    # All available columns with friendly names
+    all_columns = {
+        "contract_number": "Contract #",
+        "vendor_name": "Vendor",
+        "vehicle": "Vehicle",
+        "large_category": "Category",
+        "sub_category": "Sub-Category",
+        "city": "City",
+        "state": "State",
+        "zip": "ZIP",
+        "phone": "Phone",
+        "email": "Email",
+        "website": "Website",
+        "option_period_end_date": "Option End",
+        "ultimate_contract_end_date": "Ultimate End",
+        "sam_uei": "SAM UEI",
+        "closed_for_new_award": "Closed for New Award",
+        "small_business": "SB",
+        "other_than_small_business": "Other Than SB",
+        "woman_owned": "Woman Owned",
+        "sdvosb": "SDVOSB",
+        "eight_a": "8(a)",
+        "hub_zone": "HUBZone",
+        "veteran_owned": "Vet Owned",
+        "sin_count": "# SINs",
+        "termination_flag": "⚠️ Terminated",
+        "termination_date": "Term. Date",
+        "termination_reason": "Term. Reason",
+        "contracting_office": "Contracting Office",
+        "first_seen_at": "First Seen",
+        "last_seen_at": "Last Seen",
+        "status": "Status",
+    }
+
+    available_cols = {k: v for k, v in all_columns.items() if k in df.columns}
+
+    default_cols = [
+        "contract_number", "vendor_name", "vehicle", "large_category",
+        "state", "sin_count", "option_period_end_date",
+        "ultimate_contract_end_date", "small_business", "sdvosb",
+        "eight_a", "termination_flag", "termination_date",
         "termination_reason",
     ]
-    display_df = df[[c for c in display_cols if c in df.columns]].rename(
-        columns={
-            "contract_number": "Contract #",
-            "vendor_name": "Vendor",
-            "vehicle": "Vehicle",
-            "large_category": "Category",
-            "state": "State",
-            "option_period_end_date": "Option End",
-            "ultimate_contract_end_date": "Ultimate End",
-            "small_business": "SB",
-            "sdvosb": "SDVOSB",
-            "eight_a": "8(a)",
-            "termination_flag": "⚠️ Terminated",
-            "termination_date": "Term. Date",
-            "termination_reason": "Term. Reason",
-        }
+    default_cols = [c for c in default_cols if c in available_cols]
+
+    with st.expander("Configure Columns", expanded=False):
+        selected_cols = st.multiselect(
+            "Choose columns to display",
+            options=list(available_cols.keys()),
+            default=default_cols,
+            format_func=lambda x: available_cols.get(x, x),
+        )
+
+    if not selected_cols:
+        selected_cols = default_cols
+
+    display_df = df[[c for c in selected_cols if c in df.columns]].rename(
+        columns=available_cols
     )
 
     if len(display_df) <= STYLE_LIMIT:
