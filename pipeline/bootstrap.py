@@ -36,6 +36,28 @@ def get_db_path(config: dict) -> Path:
     return db_path
 
 
+def upgrade_schema(conn: sqlite3.Connection) -> None:
+    """
+    Add columns that may be missing from older database versions.
+    Uses 'ALTER TABLE ... ADD COLUMN' which is safe to run repeatedly
+    (we catch the 'duplicate column name' error).
+    """
+    cursor = conn.cursor()
+    migrations = [
+        ("terminations", "source", "TEXT"),
+        ("terminations", "description", "TEXT"),
+        ("mas_vendors", "usa_award_key", "TEXT"),
+        ("mas_vendors", "termination_check_date", "TEXT"),
+    ]
+    for table, col, col_type in migrations:
+        try:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+            logger.info(f"Added missing column {table}.{col}")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+    conn.commit()
+
+
 def create_tables(conn: sqlite3.Connection) -> None:
     """Create all tables. Safe to call on an existing database."""
     cursor = conn.cursor()
@@ -354,6 +376,7 @@ def main() -> None:
             drop_tables(conn)
 
         create_tables(conn)
+        upgrade_schema(conn)
         seed_vehicles(conn, config)
         logger.success(f"Bootstrap complete. Database ready at: {db_path.resolve()}")
 

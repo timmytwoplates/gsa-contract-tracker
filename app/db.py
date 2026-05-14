@@ -204,11 +204,21 @@ def get_cancellation_pending(vehicle: str | None = None) -> pd.DataFrame:
             t.termination_code,
             t.termination_reason,
             t.termination_date,
+            t.mod_number,
             t.federal_action_obligation,
+            t.total_obligated,
             t.department,
+            t.sub_agency,
+            t.awarding_office,
             t.contractor,
+            t.contractor_parent,
+            v.state             AS vendor_state,
             v.ultimate_contract_end_date,
-            t.link
+            t.naics,
+            t.set_aside,
+            t.description       AS cancellation_description,
+            t.link,
+            (SELECT COUNT(*) FROM terminations t2 WHERE t2.piid = t.piid) AS mod_count
         FROM mas_vendors v
         INNER JOIN terminations t
             ON UPPER(TRIM(t.piid)) = UPPER(TRIM(v.contract_number))
@@ -271,16 +281,25 @@ def get_terminations(
             t.termination_code,
             t.termination_reason,
             t.termination_date,
+            t.mod_number,
             t.federal_action_obligation,
             t.total_obligated,
+            t.ceiling,
             t.department,
             t.sub_agency,
+            t.awarding_office,
             t.contractor,
+            t.contractor_parent,
             t.naics,
             t.psc,
+            t.pricing,
             t.set_aside,
             t.place_state,
-            t.link
+            t.fiscal_year,
+            t.description       AS cancellation_description,
+            t.link,
+            -- Count of mods for this contract
+            (SELECT COUNT(*) FROM terminations t2 WHERE t2.piid = t.piid) AS mod_count
         FROM terminations t
         INNER JOIN mas_vendors v
             ON UPPER(TRIM(t.piid)) = UPPER(TRIM(v.contract_number))
@@ -322,18 +341,35 @@ def get_vendor_roster(
             cv.name             AS vehicle,
             v.large_category,
             v.sub_category,
+            v.city,
             v.state,
+            v.zip,
+            v.phone,
+            v.email,
+            v.url               AS website,
             v.option_period_end_date,
             v.ultimate_contract_end_date,
             v.sam_uei,
+            v.closed_for_new_award,
             v.small_business,
+            v.other_than_small_business,
+            v.woman_owned,
             v.sdvosb,
             v.eight_a,
+            v.hub_zone,
+            v.veteran_owned,
             v.status,
+            v.first_seen_at,
+            v.last_seen_at,
             -- Flag if a termination record exists in USASpending
             CASE WHEN t.piid IS NOT NULL THEN 1 ELSE 0 END AS termination_flag,
             t.termination_date,
-            t.termination_reason
+            t.termination_reason,
+            t.awarding_office   AS contracting_office,
+            -- Count of SINs for this contract
+            (SELECT COUNT(*) FROM mas_vendor_sins s
+             WHERE s.contract_number = v.contract_number
+               AND s.vehicle_id = v.vehicle_id AND s.active = 1) AS sin_count
         FROM mas_vendors v
         INNER JOIN contract_vehicles cv ON v.vehicle_id = cv.id
         LEFT JOIN terminations t
@@ -461,3 +497,52 @@ def get_departments() -> list[str]:
         ORDER BY department
         """)
     return df["department"].tolist()
+
+
+# ---------------------------------------------------------------------------
+# Admin / System Status
+# ---------------------------------------------------------------------------
+
+
+def get_refresh_log(limit: int = 50) -> pd.DataFrame:
+    """Return recent refresh log entries for the admin panel."""
+    return query(
+        """
+        SELECT run_id, source, started_at, completed_at,
+               rows_processed, rows_changed, status, notes
+        FROM refresh_log
+        ORDER BY started_at DESC
+        LIMIT ?
+    """,
+        (limit,),
+    )
+
+
+def get_table_counts() -> dict[str, int]:
+    """Return row counts for all application tables."""
+    conn = get_connection()
+    cur = conn.cursor()
+    tables = [
+        "contract_vehicles",
+        "mas_vendors",
+        "mas_vendor_sins",
+        "terminations",
+        "mas_change_log",
+        "refresh_log",
+    ]
+    counts = {}
+    for table in tables:
+        row = cur.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+        counts[table] = row[0] if row else 0
+    return counts
+
+
+def get_mod_counts() -> pd.DataFrame:
+    """Count of modification records per PIID."""
+    return query("""
+        SELECT piid, COUNT(*) as mod_count
+        FROM terminations
+        GROUP BY piid
+        HAVING mod_count > 1
+        ORDER BY mod_count DESC
+    """)
