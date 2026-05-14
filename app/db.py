@@ -17,7 +17,7 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-CONFIG_PATH = Path("config/config.yaml")
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
 
 
 def _load_config() -> dict:
@@ -32,7 +32,8 @@ def get_connection() -> sqlite3.Connection:
     Called once per app session; Streamlit reuses it across rerenders.
     """
     config = _load_config()
-    db_path = Path(config["database"]["path"])
+    _project_root = Path(__file__).resolve().parent.parent
+    db_path = _project_root / config["database"]["path"]
 
     if not db_path.exists():
         st.error(
